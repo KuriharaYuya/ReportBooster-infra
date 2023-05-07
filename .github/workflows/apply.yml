@@ -1,0 +1,45 @@
+name: Terraform Apply on dispatch
+
+on: 
+  workflow_dispatch:
+    inputs:
+          pr_url:
+            description: 'Pull request URL'
+            required: true
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+      - name: Terraform Init
+        run: terraform init
+      - name: Apply Terraform
+        id: apply
+        run: |
+          terraform apply -auto-approve
+        continue-on-error: true
+      - name: Comment output to PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const prUrl = '${{ github.event.inputs.pr_url }}';
+            const [_, owner, repo, , prNumber] = prUrl.split('/').slice(-5);
+            const output = `<details><summary>Show Apply result</summary>
+            ${{ steps.apply.outputs.stdout }}
+            </details>
+
+            *Dispatched by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: owner,
+              repo: repo,
+              body: output
+            });
